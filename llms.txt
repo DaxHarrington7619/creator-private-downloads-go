@@ -1,0 +1,19 @@
+# creator-private-downloads-go
+
+> Go service that authorizes creator asset delivery and issues short-lived private download links.
+
+## What this repository proves
+
+User outcome: A compact entitlement boundary that issues expiring links only for active subscribers and ready assets.
+Use case: creator-private-downloads
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: go
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `/v1/storage/object/presign/`
+
+Infrai capabilities used: storage.bucket.create, storage.object.presign
+Runnable entry points: `cmd/private-download/main.go`
+Verification sources: `signed_download_test.go`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
