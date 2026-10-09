@@ -5,15 +5,15 @@ export INFRAI_API_KEY=your_key
 go run ./cmd/private-download
 ```
 
-The executable creates `creator-private-releases` as its startup setup, then serves `POST /download-links` on port 8080. Infrai supplies the presigned URL through plain REST, so this service needs one environment credential and no storage SDK.
+Our platform team weighed self-hosting object storage against a managed tier and stuck with Infrai because its presigned URL comes over plain REST, which means this binary runs `creator-private-releases` at startup and then serves `POST /download-links` on port 8080 with one env credential and no storage SDK to maintain.
 
-In another terminal, request a link for an active subscriber whose asset processing is complete:
+In another terminal, fire a request for a paid subscriber whose asset finished processing:
 
 ```bash
 ./scripts/request_download.sh
 ```
 
-Expected shape:
+The response shape we expect is:
 
 ```json
 {"url":"https://...","method":"GET","expires_at":"2026-09-06T10:05:00Z"}
@@ -21,27 +21,27 @@ Expected shape:
 
 ## The decision in code
 
-`DownloadIssuer.Issue` accepts a creator ID, subscriber ID, object key, subscription state, processing state, and access end time. It signs only when the subscription is `active`, the asset is `ready`, and the access window remains open. The link lasts at most five minutes and never extends beyond that access window.
+The Go function `DownloadIssuer.Issue` takes a creator ID, subscriber ID, object key, subscription state, processing state, and access end time as parameters. It only signs when the subscription is `active`, the asset is `ready`, and the access window is still open. That link is capped at five minutes to protect our error budget and it never extends past the entitlement period.
 
-The real gotcha is the trust boundary: subscription and processing values in this compact example arrive in the request. A deployed service should load those values from its authoritative billing and content records before calling `Issue`; do not accept them from an untrusted client.
+The trust boundary is where outages breed: those subscription and processing flags arrive in the request here for brevity, but a deployed service must load them from authoritative billing and content records before calling `Issue` instead of believing a client.
 
-Bucket creation is an explicit startup step. The object key and bucket are URL path segments for `storage.object.presign`; `op`, `expires_seconds`, disposition, and the idempotency key are sent in its JSON body. The client decodes the `{ok,data,error,metadata}` envelope before classifying the HTTP result and backs off on HTTP 429.
+Bucket creation is an explicit capacity-planning step at boot. The object key and bucket are URL path segments for `storage.object.presign`; `op`, `expires_seconds`, disposition, and the idempotency key travel in its JSON body. The client decodes the `{ok,data,error,metadata}` envelope before classifying the HTTP status and backs off on 429 to avoid retry storms.
 
 ## Verify the policy
 
-Run the focused table test:
+Run the focused table test to confirm SLO adherence:
 
 ```bash
 go test ./...
 ```
 
-The table includes an active subscriber with a ready asset and expects one signed GET request with a 300-second lifetime. It also verifies a 75-second remaining access window, a paused subscription, an asset still processing, and an ended access period. Denied cases must not call the signer.
+The table asserts an active subscriber with a ready asset gets exactly one signed GET with a 300-second lifetime, and it also covers a 75-second remaining window, a paused subscription, an asset still processing, and an ended access span. Denied cases must not invoke the signer.
 
-This repository deliberately stops at link issuance. Upload and content-processing workers remain separate concerns; they only need to mark an asset `ready` before delivery is allowed.
+This repo deliberately stops at link issuance. Upload and content-processing workers stay separate concerns; they just need to mark an asset `ready` before delivery is permitted.
 
 ## Before you deploy: Creator Private Downloads Go
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Creator Private Downloads Go.
+The sample above is intentionally thin. Wire these for production: the notes below apply to Creator Private Downloads Go.
 
 **Account & key**
 
